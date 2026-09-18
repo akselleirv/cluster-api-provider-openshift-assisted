@@ -55,6 +55,9 @@ const (
 	InstallConfigOverrides             = aiv1beta1.Group + "/install-config-overrides"
 	defaultBaremetalBaselineCapability = "None"
 	defaultBaselineCapability          = "vCurrent"
+
+	platformDefaultCapabilitiesEnabled  = "Enabled"
+	platformDefaultCapabilitiesDisabled = "Disabled"
 )
 
 var (
@@ -410,7 +413,16 @@ func getInstallConfigOverrideForCapabilities(oacp *controlplanev1alpha3.Openshif
 	}
 	installCfgOverride.Capability.BaselineCapabilitySet = configv1.ClusterVersionCapabilitySet(baselineCapability)
 
-	additionalEnabledCapabilities := getAdditionalCapabilities(oacp.Spec.Config.Capabilities.AdditionalEnabledCapabilities, isBaremetalPlatform(aci))
+	platformDefaultsEnabled, err := arePlatformDefaultCapabilitiesEnabled(oacp.Spec.Config.Capabilities.PlatformDefaultCapabilities)
+	if err != nil {
+		return "", err
+	}
+
+	additionalEnabledCapabilities := getAdditionalCapabilities(
+		oacp.Spec.Config.Capabilities.AdditionalEnabledCapabilities,
+		isBaremetalPlatform(aci),
+		platformDefaultsEnabled,
+	)
 	installCfgOverride.Capability.AdditionalEnabledCapabilities = additionalEnabledCapabilities
 
 	installCfgOverrideBytes, err := json.Marshal(installCfgOverride)
@@ -461,9 +473,22 @@ func getBaselineCapability(capability string, isBaremetalPlatform bool) (string,
 	return baselineCapability, nil
 }
 
-func getAdditionalCapabilities(specifiedAdditionalCapabilities []string, isBaremetalPlatform bool) []configv1.ClusterVersionCapability {
+func arePlatformDefaultCapabilitiesEnabled(platformDefaultCapabilities string) (bool, error) {
+	switch platformDefaultCapabilities {
+	case "", platformDefaultCapabilitiesEnabled:
+		return true, nil
+	case platformDefaultCapabilitiesDisabled:
+		return false, nil
+	}
+	return false, fmt.Errorf(
+		"invalid platform default capabilities, must be one of: %s or %s. Got: [%s]",
+		platformDefaultCapabilitiesEnabled, platformDefaultCapabilitiesDisabled, platformDefaultCapabilities,
+	)
+}
+
+func getAdditionalCapabilities(specifiedAdditionalCapabilities []string, isBaremetalPlatform, platformDefaultsEnabled bool) []configv1.ClusterVersionCapability {
 	additionalCapabilitiesList := []configv1.ClusterVersionCapability{}
-	if isBaremetalPlatform {
+	if isBaremetalPlatform && platformDefaultsEnabled {
 		additionalCapabilitiesList = append([]configv1.ClusterVersionCapability{}, defaultBaremetalAdditionalCapabilities...)
 	}
 

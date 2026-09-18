@@ -141,6 +141,16 @@ type Capabilities struct {
 	// during the installation of the workload cluster. It is empty by default.
 	// +optional
 	AdditionalEnabledCapabilities []string `json:"additionalEnabledCapabilities,omitempty"`
+
+	// PlatformDefaultCapabilities decides whether the capabilities this provider enables by
+	// default for the platform are installed alongside AdditionalEnabledCapabilities.
+	// Disabled installs only what AdditionalEnabledCapabilities lists, and is the only way to
+	// install a baremetal workload cluster without them.
+	// Only the baremetal platform has such defaults, so this has no effect elsewhere.
+	// Valid values are Enabled or Disabled. Defaults to Enabled.
+	// +kubebuilder:validation:Enum=Enabled;Disabled
+	// +optional
+	PlatformDefaultCapabilities string `json:"platformDefaultCapabilities,omitempty"`
 }
 
 // OpenshiftAssistedControlPlaneInitializationStatus provides observations of the OpenshiftAssistedControlPlane initialization process.
