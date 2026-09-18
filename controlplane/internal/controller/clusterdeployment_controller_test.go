@@ -374,6 +374,89 @@ var _ = Describe("ClusterDeployment Controller", func() {
 					Expect(aci.Annotations[controller.InstallConfigOverrides]).To(Equal(`{"capabilities":{"baselineCapabilitySet":"vCurrent","additionalEnabledCapabilities":["baremetal","Console","Insights","OperatorLifecycleManager","Ingress","marketplace","NodeTuning","DeploymentConfig"]}}`))
 				})
 			})
+			When("platform default capabilities are explicitly enabled", func() {
+				It("ACI should have the default baremetal capabilities along with the additional capabilities", func() {
+					oacp.Spec.Config.Capabilities = controlplanev1alpha3.Capabilities{
+						PlatformDefaultCapabilities:   "Enabled",
+						AdditionalEnabledCapabilities: []string{"CloudControllerManager"},
+					}
+					Expect(k8sClient.Update(ctx, oacp)).To(Succeed())
+
+					_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+						NamespacedName: client.ObjectKeyFromObject(cd),
+					})
+					Expect(err).NotTo(HaveOccurred())
+
+					aci := &hiveext.AgentClusterInstall{}
+					Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cd), aci)).To(Succeed())
+
+					By("Verifying Enabled is the same as leaving the field unset")
+					Expect(aci.Annotations).To(HaveKey(controller.InstallConfigOverrides))
+					Expect(aci.Annotations[controller.InstallConfigOverrides]).To(Equal(`{"capabilities":{"baselineCapabilitySet":"None","additionalEnabledCapabilities":["baremetal","Console","Insights","OperatorLifecycleManager","Ingress","marketplace","NodeTuning","DeploymentConfig","CloudControllerManager"]}}`))
+				})
+			})
+			When("platform default capabilities are disabled", func() {
+				It("ACI should have only the additional capabilities", func() {
+					oacp.Spec.Config.Capabilities = controlplanev1alpha3.Capabilities{
+						PlatformDefaultCapabilities:   "Disabled",
+						AdditionalEnabledCapabilities: []string{"Ingress", "CloudControllerManager"},
+					}
+					Expect(k8sClient.Update(ctx, oacp)).To(Succeed())
+
+					_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+						NamespacedName: client.ObjectKeyFromObject(cd),
+					})
+					Expect(err).NotTo(HaveOccurred())
+
+					aci := &hiveext.AgentClusterInstall{}
+					Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cd), aci)).To(Succeed())
+
+					By("Verifying none of the default baremetal capabilities were added")
+					Expect(aci.Annotations).To(HaveKey(controller.InstallConfigOverrides))
+					Expect(aci.Annotations[controller.InstallConfigOverrides]).To(Equal(`{"capabilities":{"baselineCapabilitySet":"None","additionalEnabledCapabilities":["Ingress","CloudControllerManager"]}}`))
+				})
+			})
+			When("platform default capabilities are disabled and no additional capabilities are specified", func() {
+				It("ACI should have no additional capabilities at all", func() {
+					oacp.Spec.Config.Capabilities = controlplanev1alpha3.Capabilities{
+						PlatformDefaultCapabilities: "Disabled",
+					}
+					Expect(k8sClient.Update(ctx, oacp)).To(Succeed())
+
+					_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+						NamespacedName: client.ObjectKeyFromObject(cd),
+					})
+					Expect(err).NotTo(HaveOccurred())
+
+					aci := &hiveext.AgentClusterInstall{}
+					Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cd), aci)).To(Succeed())
+
+					By("Verifying the baseline capability is still honoured on its own")
+					Expect(aci.Annotations).To(HaveKey(controller.InstallConfigOverrides))
+					Expect(aci.Annotations[controller.InstallConfigOverrides]).To(Equal(`{"capabilities":{"baselineCapabilitySet":"None"}}`))
+				})
+			})
+			When("platform default capabilities are disabled and MAPI is specified", func() {
+				It("ACI should still exclude MAPI", func() {
+					oacp.Spec.Config.Capabilities = controlplanev1alpha3.Capabilities{
+						PlatformDefaultCapabilities:   "Disabled",
+						AdditionalEnabledCapabilities: []string{"MachineAPI", "CloudControllerManager"},
+					}
+					Expect(k8sClient.Update(ctx, oacp)).To(Succeed())
+
+					_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+						NamespacedName: client.ObjectKeyFromObject(cd),
+					})
+					Expect(err).NotTo(HaveOccurred())
+
+					aci := &hiveext.AgentClusterInstall{}
+					Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cd), aci)).To(Succeed())
+
+					By("Verifying MAPI is dropped on baremetal regardless of the platform defaults")
+					Expect(aci.Annotations).To(HaveKey(controller.InstallConfigOverrides))
+					Expect(aci.Annotations[controller.InstallConfigOverrides]).To(Equal(`{"capabilities":{"baselineCapabilitySet":"None","additionalEnabledCapabilities":["CloudControllerManager"]}}`))
+				})
+			})
 			When("install config override annotation is set with MAPI capability", func() {
 				It("should still exclude MAPI from baremetal cluster capabilities", func() {
 					// Set install config override annotation
